@@ -11,6 +11,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy
 from scipy.io.wavfile import write
+from scipy.interpolate import interp1d
 
 
 def deinterleave(data, num_streams, block_size):
@@ -30,59 +31,109 @@ def gradient_to_dirac(grad_signal, grad_thresh, amp):
     return (edges > 0).astype(int)*amp
 
     
-    
+
+########### USER PARAMETERS #################    
     
     
 samplerate = 192000
 block_size = 512
 num_streams = 6
 
-plot_start_s = 0.34
-plot_end_s = 0.4
+plot_start_s = 2.74
+plot_end_s = 3.34
 
-gradient_thresh = 0.01 # where to detect a sample, based on the height of the gradient
+mse_calc_start_index = 20000
+mse_calc_end_index = 1000000
 
+gradient_thresh = 0.003 # where to detect a sample, based on the height of the gradient
+
+max_level = 5.0
 levels = [1.0, 2.0, 2.5, 3.0, 4.0]
 
+########################################
 
+plt.close('all')
 
-
-
-filepath_measurements = "Measurement2.bin"
+filepath_measurements = "Measurement8.bin"
 
 raw_data = np.fromfile(filepath_measurements, dtype=np.float32)
 
 data_deinterleaved = deinterleave(raw_data, num_streams, block_size)
-
+x_values = np.arange(0,len(data_deinterleaved[0]),1)
 level_crossings_scaled = np.zeros((len(levels), len(data_deinterleaved[0])))
 for i, level in enumerate(levels):
     level_crossings_scaled[i] = gradient_to_dirac(np.gradient(data_deinterleaved[i+1]), gradient_thresh, level)
    
     
-    
-# plotting original signal
-plt.figure("original signals")
-for i in range(1,6):
-    plt.plot((data_deinterleaved[i][int(samplerate*plot_start_s) : int(samplerate*plot_end_s)]), label = 'input ' + str(i))
-plt.plot(data_deinterleaved[0][int(samplerate*plot_start_s) : int(samplerate*plot_end_s)], label="orig signal")
-plt.legend()
 
+#normalizing signals
+scalefactor = (max_level/2) / np.max(np.abs(data_deinterleaved[0]))
+    
+data_deinterleaved_normalized = data_deinterleaved * scalefactor
+data_deinterleaved_normalized[0] += max_level/2
+
+# plotting original signal
+
+fig, ax = plt.subplots(4,1,sharex=True)
+fig.suptitle('Measurement Signals: ' + str(filepath_measurements))
+fig.canvas.manager.set_window_title('plot_' + str(filepath_measurements).replace('.bin', ''))
+for i in range(1,6):
+    ax[0].plot(x_values[int(samplerate*plot_start_s) : int(samplerate*plot_end_s)], (data_deinterleaved_normalized[i][int(samplerate*plot_start_s) : int(samplerate*plot_end_s)]), label = 'in ' + str(i))
+ax[0].plot(x_values[int(samplerate*plot_start_s) : int(samplerate*plot_end_s)], data_deinterleaved_normalized[0][int(samplerate*plot_start_s) : int(samplerate*plot_end_s)], label="orig signal")
+ax[0].legend(loc='lower left')
+ax[0].set_ylabel('amplitude')
+ax[0].set_title('Original Signals')
 
 # plotting gradients of digital output (edge detection)
-plt.figure("gradients")
-for i in range(1,6):
-    plt.plot(np.gradient(data_deinterleaved[i][int(samplerate*plot_start_s) : int(samplerate*plot_end_s)]), label = 'input ' + str(i))
-plt.plot(data_deinterleaved[0][int(samplerate*plot_start_s) : int(samplerate*plot_end_s)], label="orig signal")
-plt.legend()
 
+for i in range(1,6):
+    ax[1].plot(x_values[int(samplerate*plot_start_s) : int(samplerate*plot_end_s)], np.gradient(data_deinterleaved[i][int(samplerate*plot_start_s) : int(samplerate*plot_end_s)]), label = 'in ' + str(i))
+ax[1].plot(x_values[int(samplerate*plot_start_s) : int(samplerate*plot_end_s)], data_deinterleaved[0][int(samplerate*plot_start_s) : int(samplerate*plot_end_s)], label="orig signal")
+ax[1].legend(loc='lower left')
+ax[1].set_ylabel('amplitude')
+ax[1].set_title('Gradients')
 # plotting scaled diracs where the gradients are
-plt.figure("scaled_diracs")
+
 for i in range(5):
-    plt.plot(level_crossings_scaled[i][int(samplerate*plot_start_s) : int(samplerate*plot_end_s)], label = 'input ' + str(i))
-plt.plot(data_deinterleaved[0][int(samplerate*plot_start_s) : int(samplerate*plot_end_s)], label="orig signal")
-plt.legend()
+    ax[2].plot(x_values[int(samplerate*plot_start_s) : int(samplerate*plot_end_s)], level_crossings_scaled[i][int(samplerate*plot_start_s) : int(samplerate*plot_end_s)], label = 'in ' + str(i+1))
+ax[2].plot(x_values[int(samplerate*plot_start_s) : int(samplerate*plot_end_s)], data_deinterleaved_normalized[0][int(samplerate*plot_start_s) : int(samplerate*plot_end_s)], label="orig signal")
+ax[3].set_xlabel('samples')
+ax[2].set_ylabel('amplitude')
+ax[2].set_title('Scaled Signal and Samples')
+ax[2].legend(loc='lower left')
 #plt.plot(data_deinterleaved[4])
 #plt.plot(np.gradient(data_deinterleaved[4]))
+
+
+
+lcs_output_combined = np.zeros(level_crossings_scaled[0].shape)
+for level_crossing in level_crossings_scaled:
+    lcs_output_combined += level_crossing
+    
+
+lcs_output_combined_2 = lcs_output_combined[lcs_output_combined != 0]
+x_values_2 = x_values[lcs_output_combined != 0]
+
+f = interp1d(x_values_2, lcs_output_combined_2, kind='linear')
+
+x_values_for_interp = x_values[mse_calc_start_index:mse_calc_end_index]
+lcs_output_interpolated = f(x_values_for_interp)
+
+plt_idx_start = int(samplerate*plot_start_s) - mse_calc_start_index
+plt_idx_end = int(samplerate*plot_end_s) - mse_calc_start_index
+#ax[3].figure('Reconstruction with linear interpolation')
+ax[3].plot(x_values_for_interp[plt_idx_start:plt_idx_end], lcs_output_interpolated[plt_idx_start:plt_idx_end], label='linear interpolation')
+ax[3].plot(x_values_for_interp[plt_idx_start:plt_idx_end], data_deinterleaved_normalized[0][int(samplerate*plot_start_s):int(samplerate*plot_end_s)], label="orig signal")
+
+mse_vec = ((lcs_output_interpolated - data_deinterleaved_normalized[0][mse_calc_start_index:mse_calc_end_index])**2)
+ax[3].plot(x_values_for_interp[plt_idx_start:plt_idx_end], mse_vec[plt_idx_start:plt_idx_end], label='mse: {:.3f}'.format(mse_vec.mean()) )
+ax[3].legend(loc='lower left')
+ax[3].set_ylabel('amplitude')
+ax[3].set_title('Reconstruction with linear interpolation')
+print(mse_vec.mean())
+
+
+
 #%%
 
 import numpy as np
