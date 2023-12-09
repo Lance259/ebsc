@@ -16,7 +16,7 @@ import scipy
 ############ USER PARAMS ############
 samples = 1<<15
 period_s = 7
-csv_input_file = '/home/lhinz/Seafile/MasterS3/MasterProject/ebsc/lcs/ekgData/survey_data_7s/N_100_2225_4744.csv'
+csv_input_file = '/home/lhinz/Seafile/MasterS3/MasterProject/ebsc/lcs/ekgData/survey_data_7s/N_100_2225_4744.csv'#'/home/lhinz/Seafile/MasterS3/MasterProject/ebsc/lcs/ekgData/survey_data_7s/N_100_2225_4744.csv'
 connect_device = True
 
 
@@ -49,6 +49,7 @@ plt.plot(t_norm, mlii_data, t_resampled, mlii_data_resampled)
 """
 
 wave = mlii_data_resampled
+wave = wave/np.max(wave)
 #plt.plot(wave)
 
 value_str = ''
@@ -66,7 +67,7 @@ inst.write('DATA VOLATILE' + value_str)
 inst.write('FUNC:USER VOLATILE')
 inst.write('FUNC USER')
 inst.write('VOLT:UNIT VPP')
-inst.write('VOLT 1')
+inst.write('VOLT 1.3')
 inst.write('FREQ ' + str(1/period_s))
 
 inst.write('OUTP ON')
