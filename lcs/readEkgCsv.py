@@ -10,15 +10,16 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy
 from scipy.io.wavfile import write
+from scipy.fft import fft
 
 samplerate_orig = 360
 samplerate_new = 192000
 sample_length_s = 7
-filepath_resampled = "AB_222_242908_245427_192k.bin"
-filepath_orig = "AB_222_242908_245427_360.bin"
-filepath_sine = "sine.bin"
+n_fft = 8*2048
+filepath_ekg = '/home/lhinz/Seafile/MasterS3/MasterProject/ebsc/lcs/ekgData/survey_data_7s/N_101_187_2706.csv'
 
-ekg_data = np.genfromtxt("ekgData/survey_data_7s/AB_222_242908_245427.csv", delimiter=",")
+
+ekg_data = np.genfromtxt(filepath_ekg, delimiter=",")
 
 
 mlii_data = ekg_data[:,0][~np.isnan(ekg_data[:,0])]
@@ -27,8 +28,27 @@ while (len(mlii_data) < sample_length_s*samplerate_orig) :
 t_orig = np.linspace(0, sample_length_s, len(mlii_data))
 
 
+mlii_data = mlii_data - mlii_data.mean()
+
+Mlii_data = fft(mlii_data, n=n_fft)/n_fft
+
+f = samplerate_orig * np.arange(0,len(Mlii_data),1) / len(Mlii_data)
+
+#plt.plot(mlii_data)
+fig, ax = plt.subplots(2,1,sharex=False)
+plt.rcParams['text.usetex'] = True
+ax[0].plot(t_orig[:1000], mlii_data[:1000])
+ax[0].set_xlabel('$t$/s')
+ax[0].set_ylabel('s(t)')
+ax[0].set_title('EGK Data in time domain')
+
+ax[1].semilogy(f[:int(n_fft/2)], abs(Mlii_data[:int(n_fft/2)]))
+ax[1].set_xlabel('$f$/Hz')
+ax[1].set_ylabel('|S(f)|')
+ax[1].set_title('EGK Data in frequency domain')
 
 
+"""
 mlii_data_resampled = scipy.signal.resample(mlii_data, int(len(mlii_data)/samplerate_orig*samplerate_new))
 t_resampled = np.linspace(0, sample_length_s, len(mlii_data_resampled))
 
@@ -40,7 +60,7 @@ np.float32(mlii_data).tofile(filepath_orig)
 
 sine_data = np.sin(2*np.pi*1000*t_resampled)
 np.float32(sine_data).tofile(filepath_sine)
-
+"""
 
 
 #%% 

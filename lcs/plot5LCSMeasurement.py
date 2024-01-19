@@ -12,44 +12,7 @@ import matplotlib.pyplot as plt
 import scipy
 from scipy.io.wavfile import write
 from scipy.interpolate import interp1d
-
-
-def deinterleave(data, num_streams, block_size):
-    blocks = np.reshape(data, (-1, block_size))
-    print(blocks.shape)
-    output = np.zeros((num_streams, int(len(data)/num_streams)))
-    
-    for i in range(num_streams):
-        output[i,:] = blocks[i::num_streams].flatten()
-        
-    return output
-
-def gradient_to_dirac_scaled(grad_signal, grad_thresh, amp):
-    #edge_detect_kernel = np.array([-1, 2, -1])
-    #output = np.zeros(len(grad_signal))
-    edges = np.convolve((np.abs(grad_signal) > grad_thresh).astype(int), np.array([1,-1]), mode="same") 
-    return (edges > 0).astype(int)*amp
-
-    
-def support(vec):
-    return (vec != 0).astype(int).sum()
-
-def find_first_occurrence_index(a, b):
-    """
-    finds the index of array a where value b first occurs
-    """
-    # Convert the input list to a numpy array
-    a = np.array(a)
-    
-    # Find the indices where the value is equal to b
-    indices = np.where(a == b)[0]
-    
-    # Return the index of the first occurrence
-    if len(indices) > 0:
-        return indices[0]
-    else:
-        # Handle the case where b is not in the array
-        return None
+from localFunctions import deinterleave, gradient_to_dirac_scaled, support, find_first_occurrence_index, calc_sample_mse, calc_rmtd_lmtd
     
 ########### USER PARAMETERS #################    
     
@@ -58,10 +21,14 @@ samplerate = 192000
 block_size = 512
 num_streams = 6
 
-plot_start_s = 0.2
-plot_end_s = 0.34
+plot_start_s = 0.25
+plot_end_s = 0.35
 
 no_of_crossings_for_interp = 1000
+
+#for point-wise mse calculation at sample instances: 
+skip_first_n_samples = 10
+no_of_samples_for_mse = 1000
 
 gradient_thresh = 0.005 # where to detect a sample, based on the height of the gradient
 
@@ -72,7 +39,7 @@ levels = [1.0, 2.0, 2.5, 3.0, 4.0]
 
 plt.close('all')
 
-filepath_measurements = "Measurement6.bin"
+filepath_measurements = "Measurement5.bin"
 
 raw_data = np.fromfile(filepath_measurements, dtype=np.float32)
 
@@ -124,6 +91,59 @@ ax[2].legend(loc='lower left')
 #plt.plot(np.gradient(data_deinterleaved[4]))
 
 
+####################### 
+scaled_diracs = np.zeros(level_crossings_scaled[0][int(samplerate*plot_start_s) : int(samplerate*plot_end_s)].shape)
+for i in range(5):
+    scaled_diracs += level_crossings_scaled[i][int(samplerate*plot_start_s) : int(samplerate*plot_end_s)]
+
+orig_signal = data_deinterleaved_normalized[0][int(samplerate*plot_start_s) : int(samplerate*plot_end_s)]
+
+plt.figure()
+plt.plot(scaled_diracs)
+plt.plot(orig_signal)
+
+corr = np.correlate(scaled_diracs, orig_signal, mode='full')
+plt.plot(corr)
+
+idx = find_first_occurrence_index(corr, corr.max())
+print(idx)
+
+shift = idx - len(orig_signal) 
+
+shifted_scaled_diracs = np.roll(scaled_diracs, shift)
+
+plt.figure()
+plt.plot(scaled_diracs)
+plt.plot(orig_signal)
+
+corr2 = np.correlate(shifted_scaled_diracs, orig_signal, mode="full")
+print(find_first_occurrence_index(corr2, corr2.max()))
+
+
+rmtd, lmtd, nd = calc_rmtd_lmtd(scaled_diracs, orig_signal, t0=1000)
+
+########################
+
+
+
+
+# calculate the mse at sample - instances
+sample_mse = []
+rmtd_arr = []
+lmtd_arr = []
+no_det = []
+for i in range(5):
+    sample_mse.append(calc_sample_mse(data_deinterleaved_normalized[0], level_crossings_scaled[i], skip_first_n_samples, no_of_samples_for_mse))
+    rmtd, lmtd, not_detectable = calc_rmtd_lmtd(orig_signal, level_crossings_scaled[i][int(samplerate*plot_start_s) : int(samplerate*plot_end_s)], t0=100, y_tol=0.005)
+    rmtd_arr.append(rmtd)
+    lmtd_arr.append(lmtd)
+    no_det.append(not_detectable)
+    
+error_metrics = np.array([sample_mse, rmtd_arr, lmtd_arr, no_det])
+
+
+
+# calculate the linear interpolation and continuous mse
 
 lcs_output_combined = np.zeros(level_crossings_scaled[0].shape)
 for level_crossing in level_crossings_scaled:
@@ -133,7 +153,7 @@ support_integral = np.cumsum((lcs_output_combined != 0).astype(int))
 mse_calc_start_index = find_first_occurrence_index(support_integral, 1)
 mse_calc_end_index = find_first_occurrence_index(support_integral, no_of_crossings_for_interp) + 1
 
-
+# get only the samples, not the whole vector including zeros at non-sample times
 lcs_output_combined_2 = lcs_output_combined[lcs_output_combined != 0]
 x_values_2 = x_values[lcs_output_combined != 0]
 
