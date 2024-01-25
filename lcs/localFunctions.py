@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import scipy
 from scipy.io.wavfile import write
 from scipy.interpolate import interp1d
+from scipy.signal import resample 
 
 
 def deinterleave(data, num_streams, block_size):
@@ -119,12 +120,14 @@ def calc_sample_mse(orig_signal, sample_vec, skip_first_n_samples=10, no_of_samp
     sample_mse = mse_vec.mean()
     return sample_mse
 
-def calc_rmtd_lmtd(orig_signal, scaled_diracs, t0=500, y_tol=0.05):
+def calc_rmtd_lmtd(orig_signal, scaled_diracs, t0=500, y_tol=0.005, us_factor=4):
     #t0 = 500 #interval around the dirac of interest
     sample_events = np.arange(0,len(scaled_diracs),1)[scaled_diracs != 0]
     
     rmtd = 0
     lmtd = 0
+    rmtd_vec = []
+    lmtd_vec = []
     num_rightshifts = 0
     num_leftshifts = 0
     num_no_shift_detectable = 0
@@ -135,23 +138,31 @@ def calc_rmtd_lmtd(orig_signal, scaled_diracs, t0=500, y_tol=0.05):
         end_idx = t_k+t0+1
         
         search_signal = orig_signal[start_idx:end_idx]
-        #search_signal must be upsampled or interpolated to find the 
-        find_idx = find_first_occurrence_index(search_signal, s_hat_k, y_tol)
+        #search_signal must be upsampled to find s_hat_k with a small y_tol
+        assert (2*t0 + 1 == len(search_signal))
+        search_signal_us = resample(search_signal, (2*t0 + 1)*us_factor)
+        find_idx = find_first_occurrence_index(search_signal_us, s_hat_k, y_tol)
         
         if(find_idx is None):
             num_no_shift_detectable += 1
             find_idx = t0
             
-        find_idx = t0 - find_idx #find_idx > 0 => right shift, find_idx < 0 => left shift
+        find_idx = us_factor*t0 - find_idx #find_idx > 0 => right shift, find_idx < 0 => left shift
         
         if(find_idx > 0): # right shift detected
-            rmtd += find_idx
+            rmtd += find_idx/us_factor
+            rmtd_vec.append(find_idx/us_factor)
             num_rightshifts += 1
         else: # left shift detected
-            lmtd += find_idx
+            lmtd += find_idx/us_factor
+            lmtd_vec.append(find_idx/us_factor)
             num_leftshifts += 1
         
     rmtd /= (num_rightshifts if num_rightshifts > 0 else 1)
     lmtd /= (num_leftshifts if num_leftshifts > 0 else 1)
+    
+    assert (rmtd == np.array(rmtd_vec).mean())
+    assert (lmtd == np.array(lmtd_vec).mean())
+    
     
     return rmtd, lmtd, num_no_shift_detectable
