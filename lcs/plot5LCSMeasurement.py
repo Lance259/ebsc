@@ -14,32 +14,43 @@ from scipy.io.wavfile import write
 from scipy.interpolate import interp1d
 from localFunctions import deinterleave, gradient_to_dirac_scaled, support, find_first_occurrence_index, calc_sample_mse, calc_rmtd_lmtd
     
+import pandas as pd
+import seaborn as sns
 ########### USER PARAMETERS #################    
     
     
 samplerate = 192000
 block_size = 512
 num_streams = 6
+num_levels = 5
 
-plot_start_s = 0.25
-plot_end_s = 0.35
+filepath_measurements = "Measurement4.bin"
+freq_of_meausred_signal = 100 #in Hertz
 
-no_of_crossings_for_interp = 1000
+plot_periods = 2
+
+no_of_crossings_for_interp = 500
 
 #for point-wise mse calculation at sample instances: 
 skip_first_n_samples = 10
-no_of_samples_for_mse = 1000
+
 
 gradient_thresh = 0.005 # where to detect a sample, based on the height of the gradient
 
 max_level = 5.0
 levels = [1.0, 2.0, 2.5, 3.0, 4.0]
 
+# calculated parameters
+samples_per_period = int(samplerate / freq_of_meausred_signal)
+no_of_samples_for_mse = no_of_crossings_for_interp
+
+plot_start_s = (skip_first_n_samples/(num_levels * 2)) / freq_of_meausred_signal # we expect num_levels*2 samples per period
+plot_end_s = plot_start_s + plot_periods / freq_of_meausred_signal
 ########################################
 
 plt.close('all')
 
-filepath_measurements = "Measurement5.bin"
+
 
 raw_data = np.fromfile(filepath_measurements, dtype=np.float32)
 
@@ -60,7 +71,8 @@ data_deinterleaved_normalized[0] += max_level/2
 # plotting original signal
 
 fig, ax = plt.subplots(4,1,sharex=True)
-fig.suptitle('Measurement Signals: ' + str(filepath_measurements))
+#fig.suptitle('Measurement Signals: ' + str(filepath_measurements))
+fig.suptitle('Measurement 17Hz sine, full scale (5V p2p)')
 fig.canvas.manager.set_window_title('plot_' + str(filepath_measurements).replace('.bin', ''))
 x_plot = x_values[int(samplerate*plot_start_s) : int(samplerate*plot_end_s)] / samplerate
 for i in range(1,6):
@@ -73,11 +85,11 @@ ax[0].set_title('Original Signals')
 # plotting gradients of digital output (edge detection)
 
 for i in range(1,6):
-    ax[1].plot(x_plot, np.gradient(data_deinterleaved[i][int(samplerate*plot_start_s) : int(samplerate*plot_end_s)]), label = 'in ' + str(i))
-ax[1].plot(x_plot, data_deinterleaved[0][int(samplerate*plot_start_s) : int(samplerate*plot_end_s)], label="orig signal")
+    ax[1].plot(x_plot, 100*np.gradient(data_deinterleaved[i][int(samplerate*plot_start_s) : int(samplerate*plot_end_s)]), label = 'in ' + str(i))
+ax[1].plot(x_plot, data_deinterleaved_normalized[0][int(samplerate*plot_start_s) : int(samplerate*plot_end_s)], label="orig signal")
 ax[1].legend(loc='lower left')
 ax[1].set_ylabel('amplitude')
-ax[1].set_title('Gradients')
+ax[1].set_title('Gradients (scaled)')
 # plotting scaled diracs where the gradients are
 
 for i in range(5):
@@ -85,18 +97,21 @@ for i in range(5):
 ax[2].plot(x_plot, data_deinterleaved_normalized[0][int(samplerate*plot_start_s) : int(samplerate*plot_end_s)], label="orig signal")
 ax[3].set_xlabel('s')
 ax[2].set_ylabel('amplitude')
-ax[2].set_title('Scaled Signal and Samples')
+ax[2].set_title('Event-based samples')
 ax[2].legend(loc='lower left')
 #plt.plot(data_deinterleaved[4])
 #plt.plot(np.gradient(data_deinterleaved[4]))
 
 
+
+
+
 ####################### 
+"""
 scaled_diracs = np.zeros(level_crossings_scaled[0][int(samplerate*plot_start_s) : int(samplerate*plot_end_s)].shape)
 for i in range(5):
     scaled_diracs += level_crossings_scaled[i][int(samplerate*plot_start_s) : int(samplerate*plot_end_s)]
 
-orig_signal = data_deinterleaved_normalized[0][int(samplerate*plot_start_s) : int(samplerate*plot_end_s)]
 
 plt.figure()
 plt.plot(scaled_diracs)
@@ -106,7 +121,7 @@ corr = np.correlate(scaled_diracs, orig_signal, mode='full')
 plt.plot(corr)
 
 idx = find_first_occurrence_index(corr, corr.max())
-print(idx)
+#print(idx)
 
 shift = idx - len(orig_signal) 
 
@@ -117,29 +132,12 @@ plt.plot(scaled_diracs)
 plt.plot(orig_signal)
 
 corr2 = np.correlate(shifted_scaled_diracs, orig_signal, mode="full")
-print(find_first_occurrence_index(corr2, corr2.max()))
+#print(find_first_occurrence_index(corr2, corr2.max()))
 
 
 rmtd, lmtd, nd = calc_rmtd_lmtd(scaled_diracs, orig_signal, t0=1000)
-
+"""
 ########################
-
-
-
-
-# calculate the mse at sample - instances
-sample_mse = []
-rmtd_arr = []
-lmtd_arr = []
-no_det = []
-for i in range(5):
-    sample_mse.append(calc_sample_mse(data_deinterleaved_normalized[0], level_crossings_scaled[i], skip_first_n_samples, no_of_samples_for_mse))
-    rmtd, lmtd, not_detectable = calc_rmtd_lmtd(orig_signal, level_crossings_scaled[i][int(samplerate*plot_start_s) : int(samplerate*plot_end_s)], t0=100, y_tol=0.005)
-    rmtd_arr.append(rmtd)
-    lmtd_arr.append(lmtd)
-    no_det.append(not_detectable)
-    
-error_metrics = np.array([sample_mse, rmtd_arr, lmtd_arr, no_det])
 
 
 
@@ -176,12 +174,53 @@ ax[3].set_title('Reconstruction with linear interpolation')
 print(mse_vec.mean())
 
 
+
+"""
+# detail examination of lcs output -> gradients -> samples 
 plt.figure()
-i = 2
+i = 1
 plt.plot(x_plot, data_deinterleaved_normalized[0][int(samplerate*plot_start_s) : int(samplerate*plot_end_s)], label="orig signal")
 plt.plot(x_plot, (data_deinterleaved_normalized[i][int(samplerate*plot_start_s) : int(samplerate*plot_end_s)]), label = 'in ' + str(i))
 plt.plot(x_plot, np.gradient(data_deinterleaved[i][int(samplerate*plot_start_s) : int(samplerate*plot_end_s)]), label = 'grad_in ' + str(i))
-plt.plot(x_plot, level_crossings_scaled[i-1][int(samplerate*plot_start_s) : int(samplerate*plot_end_s)], label = 'lcs_in ' + str(i+1))
+plt.plot(x_plot, level_crossings_scaled[i-1][int(samplerate*plot_start_s) : int(samplerate*plot_end_s)], label = 'lcs_in ' + str(i))
+plt.legend()
+"""
+
+
+############## calculate error metrics ###############
+# calculate the mse at sample - instances
+sample_mse = []
+rmtd_mean_arr = []
+lmtd_mean_arr= []
+
+no_det = []
+time_deviations_list = []
+
+
+orig_signal = data_deinterleaved_normalized[0][mse_calc_start_index : mse_calc_end_index]
+
+for i in range(5):
+    sample_mse.append(calc_sample_mse(data_deinterleaved_normalized[0], level_crossings_scaled[i], skip_first_n_samples, no_of_samples_for_mse))
+    rmtd, lmtd, not_detectable = calc_rmtd_lmtd(orig_signal, level_crossings_scaled[i][mse_calc_start_index : mse_calc_end_index], t0=int(samples_per_period/8), y_tol=0.005, us_factor=16, returnArray=True)
+
+    for r in rmtd:
+        time_deviations_list.append(dict([('time deviation / ms', 1e3*r/samplerate), ('direction', 'rmtd'), ('level', i+1)]))
+    for l in lmtd:
+        time_deviations_list.append(dict([('time deviation / ms', 1e3*l/samplerate), ('direction', 'lmtd'), ('level', i+1)]))
+        
+    rmtd_mean_arr.append((rmtd.mean(), rmtd.std()))
+    lmtd_mean_arr.append((lmtd.mean(), lmtd.std()))
+    no_det.append(not_detectable)
+    
+error_metrics_each_level = np.array([sample_mse, np.array(rmtd_mean_arr)[:,0]/samplerate,np.array(rmtd_mean_arr)[:,1]/samplerate, np.array(lmtd_mean_arr)[:,0]/samplerate ,np.array(lmtd_mean_arr)[:,1]/samplerate, no_det])
+# reference error metrics: [mse, rmtd_mean, rmtd_std, lmtd_mean, lmtd_std, no_undetectable]
+
+error_metrics_average = [q.mean(axis=0) for q in error_metrics_each_level]
+
+time_deviations = pd.DataFrame(time_deviations_list, columns = ['time deviation / ms', 'direction', 'level'])
+plt.figure('lmtd_rmtd plot')
+sns.barplot(time_deviations, x="time deviation / ms", y="level", hue="direction", orient='h')
+
 #%%
 
 import numpy as np

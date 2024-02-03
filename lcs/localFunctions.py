@@ -120,16 +120,12 @@ def calc_sample_mse(orig_signal, sample_vec, skip_first_n_samples=10, no_of_samp
     sample_mse = mse_vec.mean()
     return sample_mse
 
-def calc_rmtd_lmtd(orig_signal, scaled_diracs, t0=500, y_tol=0.005, us_factor=4):
+def calc_rmtd_lmtd(orig_signal, scaled_diracs, t0=500, y_tol=0.005, us_factor=4, returnArray=False):
     #t0 = 500 #interval around the dirac of interest
     sample_events = np.arange(0,len(scaled_diracs),1)[scaled_diracs != 0]
-    
-    rmtd = 0
-    lmtd = 0
     rmtd_vec = []
     lmtd_vec = []
-    num_rightshifts = 0
-    num_leftshifts = 0
+
     num_no_shift_detectable = 0
     for t_k in sample_events:
         s_hat_k = scaled_diracs[t_k]
@@ -138,31 +134,25 @@ def calc_rmtd_lmtd(orig_signal, scaled_diracs, t0=500, y_tol=0.005, us_factor=4)
         end_idx = t_k+t0+1
         
         search_signal = orig_signal[start_idx:end_idx]
-        #search_signal must be upsampled to find s_hat_k with a small y_tol
-        assert (2*t0 + 1 == len(search_signal))
-        search_signal_us = resample(search_signal, (2*t0 + 1)*us_factor)
-        find_idx = find_first_occurrence_index(search_signal_us, s_hat_k, y_tol)
         
-        if(find_idx is None):
-            num_no_shift_detectable += 1
-            find_idx = t0
+        if(len(search_signal) > 0):
+            #search_signal must be upsampled to find s_hat_k with a small y_tol
+
+            search_signal_us = resample(search_signal, (len(search_signal))*us_factor)
+            find_idx = find_first_occurrence_index(search_signal_us, s_hat_k, y_tol)
             
-        find_idx = us_factor*t0 - find_idx #find_idx > 0 => right shift, find_idx < 0 => left shift
-        
-        if(find_idx > 0): # right shift detected
-            rmtd += find_idx/us_factor
-            rmtd_vec.append(find_idx/us_factor)
-            num_rightshifts += 1
-        else: # left shift detected
-            lmtd += find_idx/us_factor
-            lmtd_vec.append(find_idx/us_factor)
-            num_leftshifts += 1
-        
-    rmtd /= (num_rightshifts if num_rightshifts > 0 else 1)
-    lmtd /= (num_leftshifts if num_leftshifts > 0 else 1)
+            if(find_idx is None):
+                num_no_shift_detectable += 1
+                find_idx = t0
+                
+            find_idx = us_factor*t0 - find_idx #find_idx > 0 => right shift, find_idx < 0 => left shift
+            
+            if(find_idx > 0): # right shift detected
+                rmtd_vec.append(find_idx/us_factor)
+            else: # left shift detected
+                lmtd_vec.append(find_idx/us_factor)
     
-    assert (rmtd == np.array(rmtd_vec).mean())
-    assert (lmtd == np.array(lmtd_vec).mean())
-    
-    
-    return rmtd, lmtd, num_no_shift_detectable
+    if(returnArray):
+        return np.array(rmtd_vec), np.array(lmtd_vec), num_no_shift_detectable
+    else:
+        return (np.array(rmtd_vec).mean(), np.array(rmtd_vec).std()), (np.array(lmtd_vec).mean(), np.array(lmtd_vec).std()), num_no_shift_detectable
