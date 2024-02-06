@@ -6,95 +6,12 @@ import scipy
 from scipy.io.wavfile import write
 from scipy.interpolate import interp1d
 from scipy.optimize import minimize
-
+from localFunctions import gradient_to_dirac, find_first_occurrence_index, state_transition, state_to_lcs
 #%matplotlib inline
 %matplotlib qt
-
-def gradient_to_dirac(grad_signal, grad_thresh, amp):
-    """
-    Parameters
-    ----------
-    grad_signal : numpy array
-        input array, typically a gradient of a digital signal
-    grad_thresh : float
-        threshold for the peaks in the gradient signal to exceed and create a dirac at that position
-    amp : float
-        height of the output dirac .
-
-    Returns
-    -------
-    numpy array
-        an array with the same length as grad_signal. Is zero everywhere, except
-        for the indices where the gradient signal first crossed the threshold.
-
-    """
-    edges = np.convolve((np.abs(grad_signal) > grad_thresh).astype(int), np.array([1,-1]), mode="same") 
-    
-    pos_edges = ((edges > 0).astype(int)*grad_signal > 0).astype(int)
-    neg_edges = -((edges > 0).astype(int)*grad_signal < 0).astype(int)    
-    return pos_edges + neg_edges
-
-def find_first_occurrence_index(a, b):
-    """
-    finds the index of array a where value b first occurs
-    """
-    # Convert the input list to a numpy array
-    a = np.array(a)
-    
-    # Find the indices where the value is equal to b
-    indices = np.where(a == b)[0]
-    
-    # Return the index of the first occurrence
-    if len(indices) > 0:
-        return indices[0]
-    else:
-        # Handle the case where b is not in the array 
-        return None
     
 
-def state_transition(in_state, in_signals):
-    if(in_state == 0):
-        if(np.array_equal(in_signals, [0,0,1])): # state trans 0->1
-            return 1, 1
-    elif(in_state == 1):
-        if(np.array_equal(in_signals, [0,1,0])): # # state trans 1->2
-            return 2, 2
-        elif(np.array_equal(in_signals, [0,0,-1])): # state trans 1->0
-            return 0, 1
-    elif(in_state == 2):
-        if(np.array_equal(in_signals, [0,0,-1])): # state trans 2->3
-            return 3, 3
-        elif(np.array_equal(in_signals, [0,-1,0])): # state trans 2->1
-            return 1, 2
-    elif(in_state == 3):
-        if(np.array_equal(in_signals, [1,0,0])): # state trans 3->4
-            return 4, 4
-        elif(np.array_equal(in_signals, [0,0,1])): # state trans 3->2
-            return 2, 3
-    elif(in_state == 4):
-        if(np.array_equal(in_signals, [0,0,1])): #  state trans 4->5
-            return 5, 5
-        elif(np.array_equal(in_signals, [-1,0,0])): # state trans 4->3
-            return 3, 4
-    elif(in_state == 5):
-        if(np.array_equal(in_signals, [0,-1,0])): # state trans 5->6
-            return 6, 6
-        elif(np.array_equal(in_signals, [0,0,-1])): # state trans 5->4
-            return 4, 5
-    elif(in_state == 6):
-        if(np.array_equal(in_signals, [0,1,0])): # state trans 6->5
-            return 5, 6
-    else:
-        return -1
-    return in_state, 0 # stay in same state, when no matching state transition (means that the assumed start state was wrong)
-
-
-def state_to_lcs (state_array, level_list):
-    return np.array(level_list)[state_array]
-        
-
-
-filename_csv = '/home/lhinz/Seafile/MasterS3/MasterProject/ebsc/lcs/scope_altLvls_1_3V_EKG_AFIB_202_411724_414243_Input_Vor_Preamp.csv'
+filename_csv = '/home/lhinz/Seafile/MasterS3/MasterProject/ebsc/lcs/scope_altLvls_1_3V_EKG_N_100_2225_4744_Input_Vor_Preamp.csv'
 
 plot_start_s = 0
 plot_end_s = 7

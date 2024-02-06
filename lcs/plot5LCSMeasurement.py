@@ -24,8 +24,10 @@ block_size = 512
 num_streams = 6
 num_levels = 5
 
-filepath_measurements = "Measurement4.bin"
-freq_of_meausred_signal = 100 #in Hertz
+filepath_measurements = "Measurement5.bin"
+freq_of_meausred_signal = 500 #in Hertz
+titlestring = '500Hz sine, full scale (5V p2p)'
+
 
 plot_periods = 2
 
@@ -72,7 +74,7 @@ data_deinterleaved_normalized[0] += max_level/2
 
 fig, ax = plt.subplots(4,1,sharex=True)
 #fig.suptitle('Measurement Signals: ' + str(filepath_measurements))
-fig.suptitle('Measurement 17Hz sine, full scale (5V p2p)')
+fig.suptitle('Measurement ' + titlestring)
 fig.canvas.manager.set_window_title('plot_' + str(filepath_measurements).replace('.bin', ''))
 x_plot = x_values[int(samplerate*plot_start_s) : int(samplerate*plot_end_s)] / samplerate
 for i in range(1,6):
@@ -192,10 +194,8 @@ plt.legend()
 sample_mse = []
 rmtd_mean_arr = []
 lmtd_mean_arr= []
-
-no_det = []
+no_det_arr = []
 time_deviations_list = []
-
 
 orig_signal = data_deinterleaved_normalized[0][mse_calc_start_index : mse_calc_end_index]
 
@@ -203,24 +203,40 @@ for i in range(5):
     sample_mse.append(calc_sample_mse(data_deinterleaved_normalized[0], level_crossings_scaled[i], skip_first_n_samples, no_of_samples_for_mse))
     rmtd, lmtd, not_detectable = calc_rmtd_lmtd(orig_signal, level_crossings_scaled[i][mse_calc_start_index : mse_calc_end_index], t0=int(samples_per_period/8), y_tol=0.005, us_factor=16, returnArray=True)
 
+    rmtd *= 1e3
+    lmtd *= 1e3
+    
     for r in rmtd:
-        time_deviations_list.append(dict([('time deviation / ms', 1e3*r/samplerate), ('direction', 'rmtd'), ('level', i+1)]))
+        time_deviations_list.append(dict([('time deviation / ms', r/samplerate), ('direction', 'rmtd'), ('level', i+1)]))
     for l in lmtd:
-        time_deviations_list.append(dict([('time deviation / ms', 1e3*l/samplerate), ('direction', 'lmtd'), ('level', i+1)]))
+        time_deviations_list.append(dict([('time deviation / ms', l/samplerate), ('direction', 'lmtd'), ('level', i+1)]))
         
     rmtd_mean_arr.append((rmtd.mean(), rmtd.std()))
     lmtd_mean_arr.append((lmtd.mean(), lmtd.std()))
-    no_det.append(not_detectable)
+    no_det_arr.append(not_detectable)
     
-error_metrics_each_level = np.array([sample_mse, np.array(rmtd_mean_arr)[:,0]/samplerate,np.array(rmtd_mean_arr)[:,1]/samplerate, np.array(lmtd_mean_arr)[:,0]/samplerate ,np.array(lmtd_mean_arr)[:,1]/samplerate, no_det])
+error_metrics_each_level = np.nan_to_num(np.array([sample_mse, np.array(rmtd_mean_arr)[:,0]/samplerate,np.array(rmtd_mean_arr)[:,1]/samplerate, np.array(lmtd_mean_arr)[:,0]/samplerate ,np.array(lmtd_mean_arr)[:,1]/samplerate, no_det_arr]))
 # reference error metrics: [mse, rmtd_mean, rmtd_std, lmtd_mean, lmtd_std, no_undetectable]
 
 error_metrics_average = [q.mean(axis=0) for q in error_metrics_each_level]
 
 time_deviations = pd.DataFrame(time_deviations_list, columns = ['time deviation / ms', 'direction', 'level'])
 plt.figure('lmtd_rmtd plot')
+plt.title('Mean Time Deviation, ' + titlestring)
 sns.barplot(time_deviations, x="time deviation / ms", y="level", hue="direction", orient='h')
 
+
+
+##
+
+plt.figure('Signal and samples')
+for i in range(5):
+    plt.plot(x_plot, level_crossings_scaled[i][int(samplerate*plot_start_s) : int(samplerate*plot_end_s)], label = 'in ' + str(i+1))
+plt.plot(x_plot, data_deinterleaved_normalized[0][int(samplerate*plot_start_s) : int(samplerate*plot_end_s)], label="orig signal")
+plt.xlabel('s')
+plt.ylabel('amplitude')
+plt.title('Event-based samples ' + titlestring)
+plt.legend(loc='lower left')
 #%%
 
 import numpy as np
