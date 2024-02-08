@@ -13,6 +13,8 @@ from scipy.io.wavfile import write
 from scipy.interpolate import interp1d
 from scipy.signal import resample 
 
+import pandas as pd
+import seaborn as sns
 
 def deinterleave(data, num_streams, block_size):
     """
@@ -134,6 +136,22 @@ def find_first_occurrence_index(a, b, eps=0):
         # Handle the case where b is not in the array
         return None
    
+def extract_single_state_transition(arr, a):
+    """
+    Accepts a numpy array `arr` of any length and a number `a`.
+    Returns an array of the same length as `arr`, filled with zeros
+    except where the entry in `arr` matches the number `a`.
+    """
+    # Create an array of zeros with the same shape as arr
+    result = np.zeros_like(arr)
+    
+    # Find indices where arr equals a
+    indices = np.where(arr == a)
+    
+    # Fill result array with a at the corresponding indices
+    result[indices] = a
+    
+    return result
     
 def state_transition(in_state, in_signals):
     if(in_state == 0):
@@ -200,10 +218,11 @@ def calc_sample_mse(orig_signal, scaled_diracs, skip_first_n_samples=10, no_of_s
     scaled_diracs_samples_only = scaled_diracs[scaled_diracs != 0]
     
     try:
-        mse_vec = ((orig_signal_samples_only[skip_first_n_samples:skip_first_n_samples+no_of_samples_for_mse] - scaled_diracs_samples_only[skip_first_n_samples:skip_first_n_samples+no_of_samples_for_mse])**2)
+        mse_vec = ((orig_signal_samples_only - scaled_diracs_samples_only)**2) #((orig_signal_samples_only[skip_first_n_samples:skip_first_n_samples+no_of_samples_for_mse] - scaled_diracs_samples_only[skip_first_n_samples:skip_first_n_samples+no_of_samples_for_mse])**2)
     except Exception:
-        print("number of samples is only " + len(orig_signal_samples_only) + ", but " + len(no_of_samples_for_mse+skip_first_n_samples) + " samples were requested to calc mse. (including skip samples)")
-        mse_vec = ((orig_signal_samples_only[skip_first_n_samples:] - scaled_diracs_samples_only[skip_first_n_samples:])**2)
+        pass
+        #print("number of samples is only " + len(orig_signal_samples_only) + ", but " + len(no_of_samples_for_mse+skip_first_n_samples) + " samples were requested to calc mse. (including skip samples)")
+        #mse_vec = ((orig_signal_samples_only[skip_first_n_samples:] - scaled_diracs_samples_only[skip_first_n_samples:])**2)
     
     sample_mse = mse_vec.mean()
     return sample_mse
@@ -257,7 +276,7 @@ def calc_rmtd_lmtd(orig_signal, scaled_diracs, t0=500, y_tol=0.005, us_factor=4,
             
             if(find_idx is None):
                 num_no_shift_detectable += 1
-                find_idx = t0
+                find_idx = us_factor*t0
                 
             find_idx = us_factor*t0 - find_idx #find_idx > 0 => right shift, find_idx < 0 => left shift
             
@@ -266,7 +285,52 @@ def calc_rmtd_lmtd(orig_signal, scaled_diracs, t0=500, y_tol=0.005, us_factor=4,
             else: # left shift detected
                 lmtd_vec.append(find_idx/us_factor)
     
+    perc_no_shift_detectable = 1
+    if(len(sample_events) != 0):
+        perc_no_shift_detectable = num_no_shift_detectable/(len(sample_events))
+
     if(returnArray):
-        return np.array(rmtd_vec), np.array(lmtd_vec), num_no_shift_detectable
+        return np.array(rmtd_vec), np.array(lmtd_vec), perc_no_shift_detectable
     else:
-        return (np.array(rmtd_vec).mean(), np.array(rmtd_vec).std()), (np.array(lmtd_vec).mean(), np.array(lmtd_vec).std()), num_no_shift_detectable
+        return (np.array(rmtd_vec).mean(), np.array(rmtd_vec).std()), (np.array(lmtd_vec).mean(), np.array(lmtd_vec).std()), perc_no_shift_detectable
+    
+    
+def calc_error_metrics(orig_signal, scaled_diracs, samplerate, freq_of_meausred_signal, plot_mtd_details=True, titlestring='plottitle'):
+    ############## calculate error metrics ###############
+    # calculate the mse at sample - instances
+    samples_per_period = int(samplerate / freq_of_meausred_signal)
+    sample_mse = []
+    rmtd_mean_arr = []
+    lmtd_mean_arr= []
+    no_det_arr = []
+    time_deviations_list = []
+
+    for i in range(scaled_diracs.shape[0]):
+        sample_mse.append(calc_sample_mse(orig_signal, scaled_diracs[i])) #(data_deinterleaved_normalized[0], level_crossings_scaled[i], skip_first_n_samples, no_of_samples_for_mse))
+        rmtd, lmtd, not_detectable = calc_rmtd_lmtd(orig_signal, scaled_diracs[i], t0=int(samples_per_period/8), y_tol=0.005, us_factor=16, returnArray=True)
+
+        rmtd *= 1e3
+        lmtd *= 1e3
+        
+        for r in rmtd:
+            time_deviations_list.append(dict([('time deviation / ms', r/samplerate), ('direction', 'rmtd'), ('level', i+1)]))
+        for l in lmtd:
+            time_deviations_list.append(dict([('time deviation / ms', l/samplerate), ('direction', 'lmtd'), ('level', i+1)]))
+            
+        rmtd_mean_arr.append((rmtd.mean(), rmtd.std()))
+        lmtd_mean_arr.append((lmtd.mean(), lmtd.std()))
+        no_det_arr.append(not_detectable)
+        
+    error_metrics_each_level = np.nan_to_num(np.array([sample_mse, np.array(rmtd_mean_arr)[:,0]/samplerate,np.array(rmtd_mean_arr)[:,1]/samplerate, np.array(lmtd_mean_arr)[:,0]/samplerate ,np.array(lmtd_mean_arr)[:,1]/samplerate, no_det_arr]))
+    # reference error metrics: [mse, rmtd_mean, rmtd_std, lmtd_mean, lmtd_std, no_undetectable]
+
+    error_metrics_average = [q.mean(axis=0) for q in error_metrics_each_level]
+
+    if(plot_mtd_details):
+        time_deviations = pd.DataFrame(time_deviations_list, columns = ['time deviation / ms', 'direction', 'level'])
+        plt.figure('lmtd_rmtd plot')
+        plt.title('Mean Time Deviation, ' + titlestring)
+        sns.barplot(time_deviations, x="time deviation / ms", y="level", hue="direction", orient='h')
+    
+    return error_metrics_average, error_metrics_each_level
+

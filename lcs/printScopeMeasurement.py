@@ -6,23 +6,24 @@ import scipy
 from scipy.io.wavfile import write
 from scipy.interpolate import interp1d
 from scipy.optimize import minimize
-from localFunctions import gradient_to_dirac, find_first_occurrence_index, state_transition, state_to_lcs
+from localFunctions import gradient_to_dirac, find_first_occurrence_index, state_transition, state_to_lcs, extract_single_state_transition, calc_error_metrics
 #%matplotlib inline
 %matplotlib qt
     
-
-filename_csv = '/home/lhinz/Seafile/MasterS3/MasterProject/ebsc/lcs/scope_altLvls_1_3V_EKG_N_100_2225_4744_Input_Vor_Preamp.csv'
+filename_csv = '/home/lhinz/Seafile/MasterS3/MasterProject/ebsc/lcs/scope_sine_500Hz_5VFS_vorPreamp.csv'
+titlestring = 'irgendwelche EKG signals'
+freq_of_meausred_signal = 500
 
 plot_start_s = 0
-plot_end_s = 7
+plot_end_s = 2
 
-no_of_crossings_for_interp = 180
-skip_first_n_crossings = 15 # skip first crossings for mse calculation, because the state is not properly determined yet
+no_of_samples_for_mse = 40
+skip_first_n_crossings = 1 # skip first crossings for mse calculation, because the state is not properly determined yet
 
 gradient_thresh = 0.8 # where to detect a sample, based on the height of the gradient
 
 #max_level = 5.0
-levels = [0, 2, 2.25, 2.5, 2.75, 3, 4] #[0, 1.5, 2, 2.5, 3, 3.5, 4] #
+levels = [0.0, 1.0, 2.0, 2.5, 3.0, 4.0, 5.0]#[0, 2, 2.25, 2.5, 2.75, 3, 4] #[0, 1.5, 2, 2.5, 3, 3.5, 4] #
 lcs_offset= 2.5
 
 plt.close('all')
@@ -35,14 +36,17 @@ samplerate = 1/(scope_data_all[201,0]-scope_data_all[200,0]) # calc samplerate f
 scope_data = scope_data_all[200:62000, 1:5]
 scope_data = np.transpose(scope_data)
 
+
 scope_data_input = scope_data[0]
 lcs_output_analog = np.zeros((scope_data.shape[0]-1, scope_data.shape[1]))
 # some data has to be filtered, because the switching instances were not clear enough to detect state transitions
 scope_data[3] = np.convolve(scope_data[3], [1,1,1], mode='same') / 3
 scope_data[2] = np.convolve(scope_data[2], [1,1,1], mode='same') / 3
-lcs_output_analog[2] = scope_data[3]
+scope_data[1] = np.convolve(scope_data[1], [1,1,1], mode='same') / 3
+scope_data[0] = np.convolve(scope_data[0], [1,1,1,1,1,1,1,1,1,1,1], mode='same') / 11
+lcs_output_analog[0] = scope_data[3]
 lcs_output_analog[1] = scope_data[2]
-lcs_output_analog[0] = scope_data[1]
+lcs_output_analog[2] = scope_data[1]
 
 # calculat gradients -> diracs (the sample instances) from the raw data
 x_values = np.arange(0,scope_data.shape[1],1)
@@ -50,6 +54,7 @@ lcs_output_grads = np.zeros((scope_data.shape[0]-1, scope_data.shape[1]))
 for i in range(scope_data.shape[0]-1):
     lcs_output_grads[i] = gradient_to_dirac(np.gradient(lcs_output_analog[i]), gradient_thresh, 1)
  
+
 # decode the gray coded 3-bit signal into 6 possible states
 lcs_output_state = np.zeros(len(lcs_output_grads[0,:]), dtype=np.int16)
 lcs_output_state_transition = np.zeros(len(lcs_output_grads[0,:]), dtype=np.int16)
@@ -59,6 +64,10 @@ for i in range(1, len(lcs_output_grads[0,:])):
 # assigning actual levels to the states 
 lcs_output_levels = state_to_lcs(lcs_output_state, levels) - lcs_offset
 lcs_output_diracs = state_to_lcs(lcs_output_state_transition, levels)
+
+lcs_output_diracs_separate = np.zeros([6, len(lcs_output_state_transition)])
+for i in range(1,7):
+    lcs_output_diracs_separate[i-1] = state_to_lcs(extract_single_state_transition(lcs_output_state_transition, i), levels)
 
 
 data_deinterleaved_normalized = scope_data
@@ -91,7 +100,7 @@ ax[2].plot(x_plot, lcs_output_state[int(samplerate*plot_start_s) : int(samplerat
 ax[2].plot(x_plot, lcs_output_levels[int(samplerate*plot_start_s) : int(samplerate*plot_end_s)], label="actual lcs levels")
 ax[2].plot(x_plot, lcs_output_diracs[int(samplerate*plot_start_s) : int(samplerate*plot_end_s)] - lcs_offset , label = 'scaled diracs')
 ax[2].set_ylabel('amplitude')
-ax[2].set_title('Scaled Signal and Samples')
+ax[2].set_title('Event-based states and samples')
 ax[2].legend(loc='lower left')
 #plt.plot(data_deinterleaved[4])
 #plt.plot(np.gradient(data_deinterleaved[4]))
@@ -103,8 +112,9 @@ ax[2].legend(loc='lower left')
 support_integral = np.cumsum((lcs_output_diracs != 0).astype(int))
 mse_calc_start_index = find_first_occurrence_index(support_integral, skip_first_n_crossings)
 try:
-    mse_calc_end_index = find_first_occurrence_index(support_integral, no_of_crossings_for_interp) + 1
+    mse_calc_end_index = find_first_occurrence_index(support_integral, no_of_samples_for_mse + skip_first_n_crossings) + 1
 except Exception:
+    print('Not enough crossings in signal, to get the desired no_of_samples_for_mse')
     mse_calc_end_index = len(support_integral) - 1000
 
 
@@ -142,3 +152,16 @@ ax[3].set_ylim([-1,2])
 ax[3].set_title('Reconstruction with linear interpolation')
 ax[3].legend(loc='lower left')
 
+
+################ evaluation of error metrics #################
+
+orig_signal = -optimized_offset + lcs_offset + scope_data[0][mse_calc_start_index : mse_calc_end_index]
+scaled_diracs = lcs_output_diracs_separate[:, mse_calc_start_index : mse_calc_end_index]
+
+x_plot = np.arange(0,len(orig_signal),1)/samplerate
+plt.figure()
+plt.plot(x_plot, orig_signal)
+for i in range(6):
+    plt.plot(x_plot, scaled_diracs[i])
+error_metrics_average, error_metrics_each_level = calc_error_metrics(orig_signal, scaled_diracs, samplerate, freq_of_meausred_signal, True, titlestring)
+print('ferting')

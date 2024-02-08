@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import scipy
 from scipy.io.wavfile import write
 from scipy.interpolate import interp1d
-from localFunctions import deinterleave, gradient_to_dirac_scaled, support, find_first_occurrence_index, calc_sample_mse, calc_rmtd_lmtd
+from localFunctions import deinterleave, gradient_to_dirac_scaled, support, find_first_occurrence_index, calc_sample_mse, calc_rmtd_lmtd, calc_error_metrics
     
 import pandas as pd
 import seaborn as sns
@@ -31,7 +31,7 @@ titlestring = '500Hz sine, full scale (5V p2p)'
 
 plot_periods = 2
 
-no_of_crossings_for_interp = 500
+no_of_samples_for_mse = 500
 
 #for point-wise mse calculation at sample instances: 
 skip_first_n_samples = 10
@@ -43,8 +43,6 @@ max_level = 5.0
 levels = [1.0, 2.0, 2.5, 3.0, 4.0]
 
 # calculated parameters
-samples_per_period = int(samplerate / freq_of_meausred_signal)
-no_of_samples_for_mse = no_of_crossings_for_interp
 
 plot_start_s = (skip_first_n_samples/(num_levels * 2)) / freq_of_meausred_signal # we expect num_levels*2 samples per period
 plot_end_s = plot_start_s + plot_periods / freq_of_meausred_signal
@@ -150,8 +148,8 @@ for level_crossing in level_crossings_scaled:
     lcs_output_combined += level_crossing
     
 support_integral = np.cumsum((lcs_output_combined != 0).astype(int))
-mse_calc_start_index = find_first_occurrence_index(support_integral, 1)
-mse_calc_end_index = find_first_occurrence_index(support_integral, no_of_crossings_for_interp) + 1
+mse_calc_start_index = find_first_occurrence_index(support_integral, skip_first_n_samples)
+mse_calc_end_index = find_first_occurrence_index(support_integral, no_of_samples_for_mse + skip_first_n_samples) + 1
 
 # get only the samples, not the whole vector including zeros at non-sample times
 lcs_output_combined_2 = lcs_output_combined[lcs_output_combined != 0]
@@ -188,46 +186,11 @@ plt.plot(x_plot, level_crossings_scaled[i-1][int(samplerate*plot_start_s) : int(
 plt.legend()
 """
 
-
-############## calculate error metrics ###############
-# calculate the mse at sample - instances
-sample_mse = []
-rmtd_mean_arr = []
-lmtd_mean_arr= []
-no_det_arr = []
-time_deviations_list = []
-
 orig_signal = data_deinterleaved_normalized[0][mse_calc_start_index : mse_calc_end_index]
+scaled_diracs = level_crossings_scaled[:, mse_calc_start_index : mse_calc_end_index]
 
-for i in range(5):
-    sample_mse.append(calc_sample_mse(data_deinterleaved_normalized[0], level_crossings_scaled[i], skip_first_n_samples, no_of_samples_for_mse))
-    rmtd, lmtd, not_detectable = calc_rmtd_lmtd(orig_signal, level_crossings_scaled[i][mse_calc_start_index : mse_calc_end_index], t0=int(samples_per_period/8), y_tol=0.005, us_factor=16, returnArray=True)
+error_metrics_average, error_metrics_each_level = calc_error_metrics(orig_signal, scaled_diracs, samplerate, freq_of_meausred_signal, True, titlestring)
 
-    rmtd *= 1e3
-    lmtd *= 1e3
-    
-    for r in rmtd:
-        time_deviations_list.append(dict([('time deviation / ms', r/samplerate), ('direction', 'rmtd'), ('level', i+1)]))
-    for l in lmtd:
-        time_deviations_list.append(dict([('time deviation / ms', l/samplerate), ('direction', 'lmtd'), ('level', i+1)]))
-        
-    rmtd_mean_arr.append((rmtd.mean(), rmtd.std()))
-    lmtd_mean_arr.append((lmtd.mean(), lmtd.std()))
-    no_det_arr.append(not_detectable)
-    
-error_metrics_each_level = np.nan_to_num(np.array([sample_mse, np.array(rmtd_mean_arr)[:,0]/samplerate,np.array(rmtd_mean_arr)[:,1]/samplerate, np.array(lmtd_mean_arr)[:,0]/samplerate ,np.array(lmtd_mean_arr)[:,1]/samplerate, no_det_arr]))
-# reference error metrics: [mse, rmtd_mean, rmtd_std, lmtd_mean, lmtd_std, no_undetectable]
-
-error_metrics_average = [q.mean(axis=0) for q in error_metrics_each_level]
-
-time_deviations = pd.DataFrame(time_deviations_list, columns = ['time deviation / ms', 'direction', 'level'])
-plt.figure('lmtd_rmtd plot')
-plt.title('Mean Time Deviation, ' + titlestring)
-sns.barplot(time_deviations, x="time deviation / ms", y="level", hue="direction", orient='h')
-
-
-
-##
 
 plt.figure('Signal and samples')
 for i in range(5):
@@ -237,6 +200,7 @@ plt.xlabel('s')
 plt.ylabel('amplitude')
 plt.title('Event-based samples ' + titlestring)
 plt.legend(loc='lower left')
+
 #%%
 
 import numpy as np
