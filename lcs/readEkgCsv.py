@@ -35,36 +35,25 @@ Mlii_data = fft(mlii_data, n=n_fft)/n_fft
 f = samplerate_orig * np.arange(0,len(Mlii_data),1) / len(Mlii_data)
 
 #plt.plot(mlii_data)
-fig, ax = plt.subplots(2,1,sharex=False)
+fig, ax = plt.subplots(2,1,sharex=False, tight_layout=True)
 plt.rcParams['text.usetex'] = True
 ax[0].plot(t_orig[:1000], mlii_data[:1000])
 ax[0].set_xlabel('$t$/s')
 ax[0].set_ylabel('s(t)')
 ax[0].set_title('EGK Data in time domain')
 
-ax[1].semilogy(f[:int(n_fft/2)], abs(Mlii_data[:int(n_fft/2)]))
+ax[1].plot(f[:int(n_fft/2)], 20*np.log10(abs(Mlii_data[:int(n_fft/2)])))
 ax[1].set_xlabel('$f$/Hz')
-ax[1].set_ylabel('|S(f)|')
+ax[1].set_ylabel('20log(|S(f)|)dBV')
+#ax[1].set_ylim([-10,0])
 ax[1].set_title('EGK Data in frequency domain')
 
 
-"""
-mlii_data_resampled = scipy.signal.resample(mlii_data, int(len(mlii_data)/samplerate_orig*samplerate_new))
-t_resampled = np.linspace(0, sample_length_s, len(mlii_data_resampled))
-
-plt.plot(t_orig[0:40], mlii_data[0:40], t_resampled[0:25000], mlii_data_resampled[0:25000])
-
-
-np.float32(mlii_data_resampled).tofile(filepath_resampled)
-np.float32(mlii_data).tofile(filepath_orig)
-
-sine_data = np.sin(2*np.pi*1000*t_resampled)
-np.float32(sine_data).tofile(filepath_sine)
-"""
-
 
 #%% 
-
+"""
+# Write CSV to Wave file
+"""
 import os
 import numpy as np
 import matplotlib.pyplot as plt

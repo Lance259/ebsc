@@ -209,7 +209,7 @@ import scipy
 from scipy.io.wavfile import write
 
 
-filepath_measurements = "/home/lhinz/Seafile/MasterS3/MasterProject/ebsc/lcs/inputSignal.bin"
+filepath_measurements = "/home/lhinz/Seafile/MasterS3/MasterProject/ebsc/lcs/lcs_meas_data/inputSignal.bin"
 raw_data = np.fromfile(filepath_measurements, dtype=np.float32)
 
 new_data = np.reshape(raw_data, (-1,512))

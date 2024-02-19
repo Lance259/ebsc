@@ -296,6 +296,32 @@ def calc_rmtd_lmtd(orig_signal, scaled_diracs, t0=500, y_tol=0.005, us_factor=4,
     
     
 def calc_error_metrics(orig_signal, scaled_diracs, samplerate, freq_of_meausred_signal, plot_mtd_details=True, titlestring='plottitle'):
+    """
+    
+
+    Parameters
+    ----------
+    orig_signal : 1D np array length N
+        array containing the original signal with respect to which to calc the metrics. 
+    scaled_diracs : np array length LxN
+        matrix with N columns, and L rows. each row contains the event-based samples for one level. A sample is given as a correctly scaled single non-zero entry in an array that is zero otherwise. 
+    samplerate : int
+        sample rate for correct display of time unit 
+    freq_of_meausred_signal : float
+        used to determine the t_0 interval for MTD calculation
+    plot_mtd_details : bool, optional
+        Whether to plot LMTD/RMTD for each level. The default is True.
+    titlestring : string, optional
+        Used in plot titles. The default is 'plottitle'.
+
+    Returns
+    -------
+    error_metrics_average : np array of length 6
+        contains: [mse, rmtd_mean, rmtd_std, lmtd_mean, lmtd_std, perc_no_undetectable]
+    error_metrics_each_level : TYPE
+        contains: [mse, rmtd_mean, rmtd_std, lmtd_mean, lmtd_std, perc_no_undetectable]
+
+    """
     ############## calculate error metrics ###############
     # calculate the mse at sample - instances
     samples_per_period = int(samplerate / freq_of_meausred_signal)
@@ -322,7 +348,7 @@ def calc_error_metrics(orig_signal, scaled_diracs, samplerate, freq_of_meausred_
         no_det_arr.append(not_detectable)
         
     error_metrics_each_level = np.nan_to_num(np.array([sample_mse, np.array(rmtd_mean_arr)[:,0]/samplerate,np.array(rmtd_mean_arr)[:,1]/samplerate, np.array(lmtd_mean_arr)[:,0]/samplerate ,np.array(lmtd_mean_arr)[:,1]/samplerate, no_det_arr]))
-    # reference error metrics: [mse, rmtd_mean, rmtd_std, lmtd_mean, lmtd_std, no_undetectable]
+    # reference error metrics: [mse, rmtd_mean, rmtd_std, lmtd_mean, lmtd_std, perc_no_undetectable]
 
     error_metrics_average = [q.mean(axis=0) for q in error_metrics_each_level]
 

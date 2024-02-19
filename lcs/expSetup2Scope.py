@@ -10,7 +10,7 @@ from localFunctions import gradient_to_dirac, find_first_occurrence_index, state
 #%matplotlib inline
 %matplotlib qt
     
-filename_csv = '/home/lhinz/Seafile/MasterS3/MasterProject/ebsc/lcs/scope_altLvls_1_3V_EKG_AFIB_202_411724_414243_Input_Vor_Preamp.csv'
+filename_csv = '/home/lhinz/Seafile/MasterS3/MasterProject/ebsc/lcs/lcs_meas_data/scope_altLvls_1_3V_EKG_AFIB_202_411724_414243_Input_Vor_Preamp.csv'
 titlestring = 'EKG_AFIB_202_411724_414243'
 freq_of_meausred_signal = 10
 switch_order_of_inputs = False
