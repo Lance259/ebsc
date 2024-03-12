@@ -10,15 +10,18 @@ from localFunctions import gradient_to_dirac, find_first_occurrence_index, state
 #%matplotlib inline
 %matplotlib qt
     
-filename_csv = '/home/lhinz/Seafile/MasterS3/MasterProject/ebsc/lcs/lcs_meas_data/scope_altLvls_1_3V_EKG_AFIB_202_411724_414243_Input_Vor_Preamp.csv'
+filename_csv = '/home/lhinz/Seafile/MasterS3/MasterProject/ebsc/lcs/lcs_meas_data/scope_altLvls_1_3V_EKG_N_100_2225_4744_Input_Vor_Preamp.csv'
+
 titlestring = 'EKG_AFIB_202_411724_414243'
 freq_of_meausred_signal = 10
 switch_order_of_inputs = False
 
-plot_start_s = 1
-plot_end_s = 3
+use_perfect_sampler = False     # use software lcs for given input signal instead of the meausrements
 
-no_of_samples_for_mse = 100
+plot_start_s = 0
+plot_end_s = 1
+
+no_of_samples_for_mse = 40
 skip_first_n_crossings = 20 # skip first crossings for mse calculation, because the state is not properly determined yet
 
 gradient_thresh = 0.5 # where to detect a sample, based on the height of the gradient
@@ -64,6 +67,25 @@ for i in range(scope_data.shape[0]-1):
     lcs_output_grads[i] = gradient_to_dirac(np.gradient(lcs_output_analog[i]), gradient_thresh, 1)
  
 
+
+def level_crossing_sample(orig_signal, levels, hysteresis = 100):
+    output_separate = np.zeros((len(levels) - 1, len(orig_signal)))
+    output_combined = np.zeros(len(orig_signal))
+    hys = 0
+    for l, level in enumerate(levels):
+        if(l > 0 and level > 0):
+            for i in range(len(orig_signal)-1):
+                if(hys <= 0 and ((orig_signal[i] <= level and orig_signal[i+1] >= level) or (orig_signal[i] >= level and orig_signal[i+1] <= level))):
+                    output_combined[i] = level
+                    output_separate[l-1][i] = level
+                    hys = hysteresis
+                hys -= 1
+        
+    return output_combined, output_separate
+    
+
+    
+    
 # decode the gray coded 3-bit signal into 6 possible states
 lcs_output_state = np.zeros(len(lcs_output_grads[0,:]), dtype=np.int16)
 lcs_output_state_transition = np.zeros(len(lcs_output_grads[0,:]), dtype=np.int16)
@@ -81,6 +103,9 @@ for i in range(1,7):
 
 data_deinterleaved_normalized = scope_data
 
+if(use_perfect_sampler):
+    lcs_output_diracs, lcs_output_diracs_separate = level_crossing_sample(scope_data[0]+lcs_offset, levels)
+     
 
 # find out the indices at the first crossing and the n-th crossing 
 support_integral = np.cumsum((lcs_output_diracs != 0).astype(int))
@@ -101,6 +126,7 @@ fig, ax = plt.subplots(n_plots,1,sharex=True)
 plt.suptitle(titlestring)
 #fig.suptitle('Measurement Signals: ' + str(filepath_measurements))
 #fig.canvas.manager.set_window_title('plot_' + str(filepath_measurements).replace('.bin', ''))
+
 """
 for i in range(1,4):
     ax[n_plot_idx].plot(x_plot, (scope_data[i][int(samplerate*plot_start_s) : int(samplerate*plot_end_s)]), label = 'in ' + str(i))

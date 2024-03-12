@@ -333,7 +333,7 @@ def calc_error_metrics(orig_signal, scaled_diracs, samplerate, freq_of_meausred_
 
     for i in range(scaled_diracs.shape[0]):
         sample_mse.append(calc_sample_mse(orig_signal, scaled_diracs[i])) #(data_deinterleaved_normalized[0], level_crossings_scaled[i], skip_first_n_samples, no_of_samples_for_mse))
-        rmtd, lmtd, not_detectable = calc_rmtd_lmtd(orig_signal, scaled_diracs[i], t0=int(samples_per_period/8), y_tol=0.005, us_factor=16, returnArray=True)
+        rmtd, lmtd, not_detectable = calc_rmtd_lmtd(orig_signal, scaled_diracs[i], t0=int(samples_per_period/8), y_tol=5e-3, us_factor=16, returnArray=True)
 
         rmtd *= 1e3
         lmtd *= 1e3
